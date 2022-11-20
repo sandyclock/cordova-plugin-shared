@@ -27,7 +27,7 @@ SOFTWARE.
   xmlns="http://apache.org/cordova/ns/plugins/1.0"
   xmlns:android="http://schemas.android.com/apk/res/android"
   id="cordova-plugin-shared"
-  version="1.1.0"
+  version="1.1.3"
 >
   <name>Shared</name>
   <description>Cordova "Shared" plugin for Cordova</description>
@@ -140,7 +140,7 @@ SOFTWARE.
     </config-file>
 
     <config-file target="AndroidManifest.xml" parent="/manifest/application">
-      <activity android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode" android:label="@string/activity_name"  android:name="com.missiveapp.openwith.IntentActivity" android:allowTaskReparenting="true" android:alwaysRetainTaskState="true" android:launchMode="singleTop"  android:theme="@android:style/Theme.DeviceDefault.NoActionBar" android:windowSoftInputMode="adjustResize">
+      <activity android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode" android:label="@string/activity_name"  android:name="com.missiveapp.openwith.IntentActivity" android:allowTaskReparenting="true" android:alwaysRetainTaskState="true" android:launchMode="singleTop"  android:theme="@android:style/Theme.DeviceDefault.NoActionBar" android:windowSoftInputMode="adjustResize" android:exported="true">
         <intent-filter>
           <data android:mimeType="text/plain" />
           <action android:name="android.intent.action.SEND" />

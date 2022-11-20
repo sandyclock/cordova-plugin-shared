@@ -161,7 +161,6 @@ class Serializer {
     int taskId = intent.getIntExtra("org.chromium.chrome.extra.TASK_ID", 0);
     Uri screenshotUri = extras.getParcelable("share_screenshot_as_stream");
 
-    final String dataFromURI = getDataFromURI(activity.getContentResolver(), screenshotUri);
 
 //    StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
 //    StrictMode.setThreadPolicy(policy);
@@ -177,11 +176,16 @@ class Serializer {
       urlItem.put("url", browserUrl);
       urlItem.put("title", subject);
       urlItem.put("uti", "public.url");
-      urlItem.put("base64", dataFromURI);
-      urlItem.put("imageType", "image/jpeg");
+      if (screenshotUri!=null){
+        final String dataFromURI = getDataFromURI(activity.getContentResolver(), screenshotUri);
+        urlItem.put("base64", dataFromURI);
+        urlItem.put("imageType", "image/jpeg");
+      }
       items.put(urlItem);
 
-      decodeQRFromPreviewUri(urlItem, activity, screenshotUri);
+      if (screenshotUri!=null){
+        decodeQRFromPreviewUri(urlItem, activity, screenshotUri);
+      }
 
       _sendIntent.start((items));
     } catch (JSONException e) {
