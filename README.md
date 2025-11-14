@@ -20,7 +20,6 @@ You'd like your app to be listed in the **Send to...** section for certain types
 ## Table of Contents
 
 - [Installation](#installation)
-- [Usage with Capacitor](#usage-with-capacitor)
 - [Usage](#usage)
 - [API](#api)
 - [License](#license)
@@ -61,157 +60,112 @@ It shouldn't be too hard. But just in case, Jean-Christophe Hoelt [posted a scre
 
 ## Usage with Capacitor
 
-### Android Requirements
+When using this plugin with Capacitor, Cordova hooks do not run automatically. This means that placeholder strings in the plugin's source files are not replaced when Capacitor syncs the plugin. You need to handle this manually.
 
-**AndroidX Support Required**
+### Automatic Fix Script
 
-This plugin uses AndroidX annotations (`androidx.annotation.RequiresApi` and `androidx.annotation.Nullable`) for API level checking and nullability documentation. Your Capacitor project must have AndroidX enabled.
+The easiest solution is to use the provided fix script that automatically replaces placeholders after `npx cap sync`. The scripts are included in the plugin and can be referenced directly:
 
-To enable AndroidX in your Capacitor project, ensure your `android/gradle.properties` file contains:
-
-```properties
-android.useAndroidX=true
-android.enableJetifier=true
-```
-
-If your project doesn't use AndroidX, you have two options:
-1. **Enable AndroidX** (recommended): Add the properties above to `gradle.properties`
-2. **Remove annotations**: The `@RequiresApi` and `@Nullable` annotations are optional and can be removed if you prefer not to use AndroidX
-
-### iOS Share Extension Setup
-
-When using this plugin with Capacitor, the iOS Share Extension must be manually set up because Capacitor doesn't support Cordova hook scripts that automatically configure the extension. Follow these steps:
-
-#### 1. Copy Share Extension Files
-
-Copy the Share Extension source files from the plugin to your iOS project:
-
-```bash
-# From your project root
-cp -r node_modules/cordova-plugin-shared/src/ios/ShareExtension ios/App/ShareExt/
-```
-
-This will copy:
-- `ShareViewController.h` - Header file
-- `ShareViewController.m` - Implementation file
-- `ShareExtension-Info.plist` - Extension configuration
-- `ShareExtension.entitlements` - App group entitlements
-- `MainInterface.storyboard` - UI storyboard
-
-#### 2. Create Share Extension Target in Xcode
-
-1. Open your iOS project in Xcode: `ios/App/App.xcworkspace`
-2. Go to **File → New → Target**
-3. Select **Share Extension** under **iOS → Application Extension**
-4. Name it `ShareExt` (or match the name used in your project)
-5. Set the language to **Objective-C**
-6. Click **Finish**
-
-#### 3. Replace Placeholders in Share Extension Files
-
-The Share Extension files contain placeholders that must be replaced with your app's actual values. 
-
-**Important: Understanding Bundle Identifiers and App Groups**
-
-The plugin's hook scripts (which don't run in Capacitor) replace `__BUNDLE_IDENTIFIER__` consistently with `{MAIN_APP_BUNDLE_ID}.shareextension` in all files. This means:
-- **Share Extension Bundle ID**: `{MAIN_APP_BUNDLE_ID}.shareextension` (e.g., `com.example.myapp.shareextension`)
-- **App Group ID**: `group.{MAIN_APP_BUNDLE_ID}.shareextension` (e.g., `group.com.example.myapp.shareextension`)
-
-**Important:** When creating the App Group in your Apple Developer account and Xcode, you must include `.shareextension` in the group name to match this pattern. 
-
-**Example:** If your main app's bundle ID is `com.example.myapp`, then:
-- Share Extension bundle ID: `com.example.myapp.shareextension`
-- App Group ID: `group.com.example.myapp.shareextension`
-
-**Placeholders to replace:**
-
-Replace `__BUNDLE_IDENTIFIER__` with `{MAIN_APP_BUNDLE_ID}.shareextension` in **all files** (the replacement is consistent across all files):
-
-**Files to update:**
-
-1. **ShareExtension-Info.plist**:
-   ```xml
-   <!-- Replace these values: -->
-   <key>CFBundleDisplayName</key>
-   <string>__DISPLAY_NAME__</string>  <!-- e.g., "My App Share" -->
-   
-   <key>CFBundleIdentifier</key>
-   <string>__BUNDLE_IDENTIFIER__</string>  <!-- Replace with: {MAIN_APP_BUNDLE_ID}.shareextension (e.g., "com.example.myapp.shareextension") -->
-   
-   <key>CFBundleShortVersionString</key>
-   <string>__BUNDLE_SHORT_VERSION_STRING__</string>  <!-- e.g., "1.0.0" -->
-   
-   <key>CFBundleVersion</key>
-   <string>__BUNDLE_VERSION__</string>  <!-- e.g., "1" -->
-   ```
-
-2. **ShareExtension.entitlements**:
-   ```xml
-   <key>com.apple.security.application-groups</key>
-   <array>
-       <string>group.__BUNDLE_IDENTIFIER__</string>  <!-- Replace __BUNDLE_IDENTIFIER__ with {MAIN_APP_BUNDLE_ID}.shareextension (e.g., "group.com.example.myapp.shareextension") -->
-   </array>
-   ```
-
-3. **ShareViewController.h**:
-   ```objc
-   #define SHAREEXT_GROUP_IDENTIFIER @"group.__BUNDLE_IDENTIFIER__"  // Replace __BUNDLE_IDENTIFIER__ with {MAIN_APP_BUNDLE_ID}.shareextension (e.g., @"group.com.example.myapp.shareextension")
-   #define SHAREEXT_URL_SCHEME @"__URL_SCHEME__"  // e.g., @"myapp"
-   ```
-
-**Example:** If your main app's bundle ID is `com.example.myapp`, then:
-- Replace `__BUNDLE_IDENTIFIER__` with `com.example.myapp.shareextension` in all files
-- ShareExtension-Info.plist `CFBundleIdentifier`: `com.example.myapp.shareextension`
-- ShareExtension.entitlements app group: `group.com.example.myapp.shareextension`
-- ShareViewController.h app group: `group.com.example.myapp.shareextension`
-- **App Group to create in Apple Developer/Xcode**: `group.com.example.myapp.shareextension`
-
-**Summary:**
-- Replace `__BUNDLE_IDENTIFIER__` with `{MAIN_APP_BUNDLE_ID}.shareextension` in **all files** (consistent replacement)
-- Create the App Group with `.shareextension` in the name: `group.{MAIN_APP_BUNDLE_ID}.shareextension`
-- Both your main app and the Share Extension must be added to the same App Group in your Apple Developer account
-- The URL scheme should match what you configure in your main app's `Info.plist`
-
-#### 4. Configure App Groups
-
-1. In Xcode, select your **main app target**
-2. Go to **Signing & Capabilities**
-3. Click **+ Capability** and add **App Groups**
-4. Add a group: `group.{YOUR_MAIN_APP_BUNDLE_ID}.shareextension` (e.g., `group.com.example.myapp.shareextension`)
-5. Repeat for the **ShareExt target** with the same group identifier: `group.{YOUR_MAIN_APP_BUNDLE_ID}.shareextension`
-
-**Important:** The App Group name must include `.shareextension` to match the pattern used in the Share Extension files.
-
-#### 5. Update AppDelegate.swift
-
-Ensure your `AppDelegate.swift` handles the share extension URL scheme. The plugin expects the app to open with a custom URL scheme (e.g., `myapp://shared`) when content is shared.
-
-Example implementation in `AppDelegate.swift`:
-
-```swift
-func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
-    // Handle share extension URL
-    if url.scheme == "your-url-scheme" && url.host == "shared" {
-        // Read shared data from NSUserDefaults (app group)
-        // Process and dispatch to JavaScript
-    }
-    return true
+**Add a Capacitor hook** in `package.json` to automatically run the fix after `npx cap sync`:
+```json
+"scripts": {
+  "capacitor:sync:after": "./node_modules/cordova-plugin-shared/scripts/fix-cordova-plugin-shared.sh"
 }
 ```
 
-#### 6. Sync Capacitor
+**Note:** 
+- Capacitor automatically runs scripts with the `capacitor:sync:after` name after `npx cap sync` completes. This is similar to Cordova hooks but uses npm script naming conventions.
+- The script is referenced directly from `node_modules`, so no copying is needed. If the plugin is removed, `npx cap sync` will naturally error out when it tries to run the missing script.
 
-After making these changes, sync your Capacitor project:
+**The script will automatically:**
+- **On fresh install** (if `ios/App/ShareExt` doesn't exist or is empty):
+  - Copy Share Extension files from the plugin source to `ios/App/ShareExt/`
+  - Replace all placeholders in the copied files
+  
+- **On existing setup** (if `ios/App/ShareExt` already exists):
+  - Check existing files for placeholders and fix them if needed
+  - **Never removes or overwrites existing files** - only fixes placeholders
+
+- **Always checks**:
+  - The Capacitor copied file at `ios/capacitor-cordova-ios-plugins/sources/CordovaPluginShared/ShareViewController.h`
+  - Extracts bundle ID from Xcode project or existing ShareViewController.h
+  - Extracts URL scheme from ShareViewController.h or capacitor.config.ts
+  - Replaces `__BUNDLE_IDENTIFIER__`, `__URL_SCHEME__`, `__DISPLAY_NAME__`, etc. with actual values
+
+### Manual Fix (Alternative)
+
+If you prefer to fix it manually or the script doesn't work:
+
+1. After running `npx cap sync`, check if the file `ios/capacitor-cordova-ios-plugins/sources/CordovaPluginShared/ShareViewController.h` contains placeholders:
+   ```bash
+   grep "__BUNDLE_IDENTIFIER__\|__URL_SCHEME__" ios/capacitor-cordova-ios-plugins/sources/CordovaPluginShared/ShareViewController.h
+   ```
+
+2. If placeholders are found, replace them:
+   - Replace `__BUNDLE_IDENTIFIER__` with your share extension's bundle ID (e.g., `com.example.myapp.shareextension`)
+   - Replace `__URL_SCHEME__` with your URL scheme (e.g., `myapp`)
+
+   The file should look like:
+   ```objc
+   #define SHAREEXT_GROUP_IDENTIFIER @"group.com.example.myapp.shareextension"
+   #define SHAREEXT_URL_SCHEME @"myapp"
+   ```
+
+### Optional: Copy Scripts to Project
+
+If you prefer to have the scripts in your project's `scripts/` directory (for version control or customization), you can copy them:
 
 ```bash
-npx cap sync ios
+cp node_modules/cordova-plugin-shared/scripts/fix-cordova-plugin-shared.sh scripts/
+chmod +x scripts/fix-cordova-plugin-shared.sh
 ```
+
+Then update `package.json` to reference the local copy:
+```json
+"capacitor:sync:after": "./scripts/fix-cordova-plugin-shared.sh"
+```
+
+### Important Notes
+
+- **This file is regenerated** every time you run `npx cap sync`, so you must either:
+  - Use the automatic fix script (recommended)
+  - Manually fix it after each sync
+  - Add a post-sync hook to your build process
+
+- **The script requires** that you have:
+  - A properly configured ShareExt target in Xcode, OR
+  - A manually configured `ios/App/ShareExt/ShareViewController.h` file with the correct values
+
+- **Bundle ID format**: The script expects the bundle ID to include `.shareextension` (e.g., `com.example.myapp.shareextension`), and the App Group will be `group.{BUNDLE_ID}` (e.g., `group.com.example.myapp.shareextension`).
 
 ### Troubleshooting
 
-- **Build errors about missing files**: Ensure all Share Extension files are added to the ShareExt target in Xcode
-- **App Group not working**: Verify both app and extension are in the same App Group in Xcode and Apple Developer portal
-- **URL scheme not opening app**: Check that the URL scheme is registered in your main app's `Info.plist` and matches `SHAREEXT_URL_SCHEME` in `ShareViewController.h`
+If the automatic fix script fails:
+
+1. **Check that your ShareExt target is configured** in Xcode with the correct bundle ID
+2. **Verify your URL scheme** is set in `ios/App/ShareExt/ShareViewController.h`
+3. **Run the script manually** to see error messages:
+   ```bash
+   ./scripts/fix-cordova-plugin-shared.sh
+   ```
+
+### Available Scripts
+
+The plugin includes two helper scripts in `node_modules/cordova-plugin-shared/scripts/`:
+
+- **`fix-cordova-plugin-shared.sh`**: Automatically fixes placeholder strings after `npx cap sync`
+- **`check-cordova-plugin-shared.sh`**: Checks for placeholders without modifying files (useful for CI/CD)
+
+**Usage:**
+- Reference directly from `node_modules` in your `package.json` (recommended - no copying needed)
+- Or copy to your project's `scripts/` directory if you want to customize them
+
+**Note:** Both scripts automatically check if `cordova-plugin-shared` is installed. If the plugin is not found, they will:
+- Display an error message with clear instructions
+- Exit with code 1 (causing the hook to fail)
+- Provide two options: install the plugin or remove the script from `package.json`
+
+If you reference the script directly from `node_modules` and the plugin is removed, `npx cap sync` will naturally error out when it tries to run the missing script, providing immediate feedback.
 
 ## Usage
 
