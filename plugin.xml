@@ -140,7 +140,7 @@ SOFTWARE.
     </config-file>
 
     <config-file target="AndroidManifest.xml" parent="/manifest/application">
-      <activity android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode" android:label="@string/activity_name"  android:name="com.missiveapp.openwith.IntentActivity" android:allowTaskReparenting="true" android:alwaysRetainTaskState="true" android:launchMode="singleTop"  android:theme="@android:style/Theme.DeviceDefault.NoActionBar" android:windowSoftInputMode="adjustResize" android:exported="true">
+      <activity android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode" android:label="Share"  android:name="com.missiveapp.openwith.IntentActivity" android:allowTaskReparenting="true" android:alwaysRetainTaskState="true" android:launchMode="singleTop"  android:theme="@android:style/Theme.DeviceDefault.NoActionBar" android:windowSoftInputMode="adjustResize" android:exported="true">
         <intent-filter>
           <data android:mimeType="text/plain" />
           <action android:name="android.intent.action.SEND" />
@@ -149,7 +149,7 @@ SOFTWARE.
           <category android:name="android.intent.category.BROWSABLE" />
         </intent-filter>
 
-        <intent-filter android:label="@string/launcher_name">
+        <intent-filter android:label="Share">
           <action android:name="com.missiveapp.openwith.IntentActivity" />
           <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
