@@ -20,6 +20,7 @@ You'd like your app to be listed in the **Send to...** section for certain types
 ## Table of Contents
 
 - [Installation](#installation)
+- [Usage with Capacitor](#usage-with-capacitor)
 - [Usage](#usage)
 - [API](#api)
 - [License](#license)
@@ -57,6 +58,160 @@ cordova plugin add cordova-plugin-shared \
 | `DEVELOPMENT_TEAM` | ABCDEFGHIJ | Your Apple team ID |
 
 It shouldn't be too hard. But just in case, Jean-Christophe Hoelt [posted a screencast of it](https://youtu.be/eaE4m_xO1mg).
+
+## Usage with Capacitor
+
+### Android Requirements
+
+**AndroidX Support Required**
+
+This plugin uses AndroidX annotations (`androidx.annotation.RequiresApi` and `androidx.annotation.Nullable`) for API level checking and nullability documentation. Your Capacitor project must have AndroidX enabled.
+
+To enable AndroidX in your Capacitor project, ensure your `android/gradle.properties` file contains:
+
+```properties
+android.useAndroidX=true
+android.enableJetifier=true
+```
+
+If your project doesn't use AndroidX, you have two options:
+1. **Enable AndroidX** (recommended): Add the properties above to `gradle.properties`
+2. **Remove annotations**: The `@RequiresApi` and `@Nullable` annotations are optional and can be removed if you prefer not to use AndroidX
+
+### iOS Share Extension Setup
+
+When using this plugin with Capacitor, the iOS Share Extension must be manually set up because Capacitor doesn't support Cordova hook scripts that automatically configure the extension. Follow these steps:
+
+#### 1. Copy Share Extension Files
+
+Copy the Share Extension source files from the plugin to your iOS project:
+
+```bash
+# From your project root
+cp -r node_modules/cordova-plugin-shared/src/ios/ShareExtension ios/App/ShareExt/
+```
+
+This will copy:
+- `ShareViewController.h` - Header file
+- `ShareViewController.m` - Implementation file
+- `ShareExtension-Info.plist` - Extension configuration
+- `ShareExtension.entitlements` - App group entitlements
+- `MainInterface.storyboard` - UI storyboard
+
+#### 2. Create Share Extension Target in Xcode
+
+1. Open your iOS project in Xcode: `ios/App/App.xcworkspace`
+2. Go to **File → New → Target**
+3. Select **Share Extension** under **iOS → Application Extension**
+4. Name it `ShareExt` (or match the name used in your project)
+5. Set the language to **Objective-C**
+6. Click **Finish**
+
+#### 3. Replace Placeholders in Share Extension Files
+
+The Share Extension files contain placeholders that must be replaced with your app's actual values. 
+
+**Important: Understanding Bundle Identifiers and App Groups**
+
+The plugin's hook scripts (which don't run in Capacitor) replace `__BUNDLE_IDENTIFIER__` consistently with `{MAIN_APP_BUNDLE_ID}.shareextension` in all files. This means:
+- **Share Extension Bundle ID**: `{MAIN_APP_BUNDLE_ID}.shareextension` (e.g., `com.example.myapp.shareextension`)
+- **App Group ID**: `group.{MAIN_APP_BUNDLE_ID}.shareextension` (e.g., `group.com.example.myapp.shareextension`)
+
+**Important:** When creating the App Group in your Apple Developer account and Xcode, you must include `.shareextension` in the group name to match this pattern. 
+
+**Example:** If your main app's bundle ID is `com.example.myapp`, then:
+- Share Extension bundle ID: `com.example.myapp.shareextension`
+- App Group ID: `group.com.example.myapp.shareextension`
+
+**Placeholders to replace:**
+
+Replace `__BUNDLE_IDENTIFIER__` with `{MAIN_APP_BUNDLE_ID}.shareextension` in **all files** (the replacement is consistent across all files):
+
+**Files to update:**
+
+1. **ShareExtension-Info.plist**:
+   ```xml
+   <!-- Replace these values: -->
+   <key>CFBundleDisplayName</key>
+   <string>__DISPLAY_NAME__</string>  <!-- e.g., "My App Share" -->
+   
+   <key>CFBundleIdentifier</key>
+   <string>__BUNDLE_IDENTIFIER__</string>  <!-- Replace with: {MAIN_APP_BUNDLE_ID}.shareextension (e.g., "com.example.myapp.shareextension") -->
+   
+   <key>CFBundleShortVersionString</key>
+   <string>__BUNDLE_SHORT_VERSION_STRING__</string>  <!-- e.g., "1.0.0" -->
+   
+   <key>CFBundleVersion</key>
+   <string>__BUNDLE_VERSION__</string>  <!-- e.g., "1" -->
+   ```
+
+2. **ShareExtension.entitlements**:
+   ```xml
+   <key>com.apple.security.application-groups</key>
+   <array>
+       <string>group.__BUNDLE_IDENTIFIER__</string>  <!-- Replace __BUNDLE_IDENTIFIER__ with {MAIN_APP_BUNDLE_ID}.shareextension (e.g., "group.com.example.myapp.shareextension") -->
+   </array>
+   ```
+
+3. **ShareViewController.h**:
+   ```objc
+   #define SHAREEXT_GROUP_IDENTIFIER @"group.__BUNDLE_IDENTIFIER__"  // Replace __BUNDLE_IDENTIFIER__ with {MAIN_APP_BUNDLE_ID}.shareextension (e.g., @"group.com.example.myapp.shareextension")
+   #define SHAREEXT_URL_SCHEME @"__URL_SCHEME__"  // e.g., @"myapp"
+   ```
+
+**Example:** If your main app's bundle ID is `com.example.myapp`, then:
+- Replace `__BUNDLE_IDENTIFIER__` with `com.example.myapp.shareextension` in all files
+- ShareExtension-Info.plist `CFBundleIdentifier`: `com.example.myapp.shareextension`
+- ShareExtension.entitlements app group: `group.com.example.myapp.shareextension`
+- ShareViewController.h app group: `group.com.example.myapp.shareextension`
+- **App Group to create in Apple Developer/Xcode**: `group.com.example.myapp.shareextension`
+
+**Summary:**
+- Replace `__BUNDLE_IDENTIFIER__` with `{MAIN_APP_BUNDLE_ID}.shareextension` in **all files** (consistent replacement)
+- Create the App Group with `.shareextension` in the name: `group.{MAIN_APP_BUNDLE_ID}.shareextension`
+- Both your main app and the Share Extension must be added to the same App Group in your Apple Developer account
+- The URL scheme should match what you configure in your main app's `Info.plist`
+
+#### 4. Configure App Groups
+
+1. In Xcode, select your **main app target**
+2. Go to **Signing & Capabilities**
+3. Click **+ Capability** and add **App Groups**
+4. Add a group: `group.{YOUR_MAIN_APP_BUNDLE_ID}.shareextension` (e.g., `group.com.example.myapp.shareextension`)
+5. Repeat for the **ShareExt target** with the same group identifier: `group.{YOUR_MAIN_APP_BUNDLE_ID}.shareextension`
+
+**Important:** The App Group name must include `.shareextension` to match the pattern used in the Share Extension files.
+
+#### 5. Update AppDelegate.swift
+
+Ensure your `AppDelegate.swift` handles the share extension URL scheme. The plugin expects the app to open with a custom URL scheme (e.g., `myapp://shared`) when content is shared.
+
+Example implementation in `AppDelegate.swift`:
+
+```swift
+func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+    // Handle share extension URL
+    if url.scheme == "your-url-scheme" && url.host == "shared" {
+        // Read shared data from NSUserDefaults (app group)
+        // Process and dispatch to JavaScript
+    }
+    return true
+}
+```
+
+#### 6. Sync Capacitor
+
+After making these changes, sync your Capacitor project:
+
+```bash
+npx cap sync ios
+```
+
+### Troubleshooting
+
+- **Build errors about missing files**: Ensure all Share Extension files are added to the ShareExt target in Xcode
+- **App Group not working**: Verify both app and extension are in the same App Group in Xcode and Apple Developer portal
+- **URL scheme not opening app**: Check that the URL scheme is registered in your main app's `Info.plist` and matches `SHAREEXT_URL_SCHEME` in `ShareViewController.h`
 
 ## Usage
 
