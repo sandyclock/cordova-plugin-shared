@@ -112,6 +112,19 @@ public class OpenWithPlugin extends CordovaPlugin {
   private ArrayList pendingIntents = new ArrayList(); //NOPMD
 
   /**
+   * Track if onNewIntent() was called by the framework (not by init())
+   * This helps us understand the sequence of events
+   */
+  private boolean onNewIntentCalledByFramework = false;
+
+  /**
+   * Track if onNewIntent() has been called for the current activity's intent.
+   * This prevents duplicate processing.
+   * TEMPORARILY DISABLED: We're investigating the root cause of duplicate processing.
+   */
+  // private String lastProcessedIntentKey = null;
+
+  /**
    * Called when the WebView does a top-level navigation or refreshes.
    * <p>
    * Plugins should stop any long-running processes and clean up internal state.
@@ -124,6 +137,8 @@ public class OpenWithPlugin extends CordovaPlugin {
     handlerContext = null;
     loggerContext = null;
     pendingIntents.clear();
+    onNewIntentCalledByFramework = false;
+    // lastProcessedIntentKey = null;
   }
 
 
@@ -206,7 +221,20 @@ public class OpenWithPlugin extends CordovaPlugin {
       log(WARN, "init() -> invalidAction");
       return false;
     }
-    onNewIntent(cordova.getActivity().getIntent());
+    // Process the intent that launched the app (cold start).
+    // Only process if onNewIntent() hasn't already processed it.
+    Intent intent = cordova.getActivity().getIntent();
+    
+    if (intent != null) {
+      // Decision logic: Only process in init() if the framework did NOT call onNewIntent().
+      // If framework called it, onNewIntent() will process it when handler is set.
+      if (onNewIntentCalledByFramework) {
+        log(DEBUG, "init() - Framework already called onNewIntent(), skipping");
+      } else {
+        log(DEBUG, "init() - Processing intent from onCreate (cold start)");
+        onNewIntent(intent);
+      }
+    }
     log(DEBUG, "init() -> ok");
     return PluginResultSender.ok(context);
   }
@@ -230,6 +258,12 @@ public class OpenWithPlugin extends CordovaPlugin {
       return false;
     }
     handlerContext = context;
+    // Process any pending intents that were added before the handler was set.
+    // This handles the case where framework called onNewIntent() before setHandler().
+    if (pendingIntents.size() > 0) {
+      log(DEBUG, "setHandler() - Processing " + pendingIntents.size() + " pending intent(s)");
+      processPendingIntents();
+    }
     log(DEBUG, "setHandler() -> ok");
     return PluginResultSender.noResult(context, true);
   }
@@ -280,6 +314,24 @@ public class OpenWithPlugin extends CordovaPlugin {
    */
   @Override
   public void onNewIntent(final Intent intent) {
+    // Check if this is called by the framework or by init()
+    StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+    boolean calledByInit = false;
+    for (StackTraceElement element : stack) {
+      if (element.getClassName().contains("OpenWithPlugin") && element.getMethodName().equals("init")) {
+        calledByInit = true;
+        break;
+      }
+    }
+    
+    if (!calledByInit) {
+      onNewIntentCalledByFramework = true;
+    }
+    
+    if (intent == null) {
+      log(WARN, "onNewIntent() - Intent is null!");
+      return;
+    }
     log(DEBUG, "onNewIntent() " + intent.getAction());
 
     IntentActivity.StartActivityFun startAction = (JSONObject json) -> {
@@ -287,22 +339,73 @@ public class OpenWithPlugin extends CordovaPlugin {
         pendingIntents.add(json);
       }
       processPendingIntents();
-
     };
     populateInfoAndSend(intent, startAction);
+  }
 
+  /**
+   * Creates a unique key for an intent to identify duplicates.
+   * Uses action, data URI, type, and a hash of the processed JSON (if present) to create the key.
+   * 
+   * IMPORTANT: The key must be consistent across multiple reads of the same intent.
+   * For share intents, we use a combination of action, type, and a stable identifier
+   * from the intent's content (URI or stream data) rather than relying on extras hash
+   * which can change as the intent is processed.
+   */
+  private String createIntentKey(final Intent intent) {
+    if (intent == null) {
+      return null;
+    }
+    StringBuilder key = new StringBuilder();
+    key.append(intent.getAction());
+    
+    Bundle extras = intent.getExtras();
+    // For intents processed by IntentActivity, the "json" extra contains the processed data
+    // Use this as the primary identifier to prevent duplicate processing
+    if (extras != null && extras.get("json") != null) {
+      String jsonString = extras.get("json").toString();
+      // Use hash of JSON string to create a unique key for this processed intent
+      int jsonHash = jsonString.hashCode();
+      key.append("|json:").append(jsonHash);
+    } else {
+      // For intents not yet processed, use data URI and type
+      // These are stable identifiers that don't change as the intent is processed
+      if (intent.getData() != null) {
+        key.append("|").append(intent.getData().toString());
+      }
+      if (intent.getType() != null) {
+        key.append("|").append(intent.getType());
+      }
+      // For share intents, also include a hash of the stream URI if present
+      // This is more stable than the full extras hash
+      if (extras != null) {
+        android.net.Uri streamUri = extras.getParcelable(Intent.EXTRA_STREAM);
+        if (streamUri != null) {
+          key.append("|stream:").append(streamUri.toString().hashCode());
+        } else {
+          // Fallback to extras hash only if no stream URI
+          // But use a more stable approach - hash only the keys, not values
+          java.util.Set<String> keys = extras.keySet();
+          int keysHash = keys.toString().hashCode();
+          key.append("|keys:").append(keysHash);
+        }
+      }
+    }
+    return key.toString();
   }
 
   /**
    * When the handler is defined, call it with all attached files.
    */
   private void processPendingIntents() {
-    log(DEBUG, "processPendingIntents()");
     if (handlerContext == null) {
+      log(WARN, "processPendingIntents() - handlerContext is null, cannot send to JavaScript");
       return;
     }
-    for (int i = 0; i < pendingIntents.size(); i++) {
-      sendIntentToJavascript((JSONObject) pendingIntents.get(i));
+    int pendingSize = pendingIntents.size();
+    for (int i = 0; i < pendingSize; i++) {
+      JSONObject intent = (JSONObject) pendingIntents.get(i);
+      sendIntentToJavascript(intent);
     }
     pendingIntents.clear();
   }
@@ -311,9 +414,14 @@ public class OpenWithPlugin extends CordovaPlugin {
    * Calls the javascript intent handlers.
    */
   private void sendIntentToJavascript(final JSONObject intent) {
-    final PluginResult result = new PluginResult(PluginResult.Status.OK, intent);
-    result.setKeepCallback(true);
-    handlerContext.sendPluginResult(result);
+    try {
+      final PluginResult result = new PluginResult(PluginResult.Status.OK, intent);
+      result.setKeepCallback(true);
+      handlerContext.sendPluginResult(result);
+    } catch (Exception e) {
+      log(ERROR, "sendIntentToJavascript() - Error sending intent to JavaScript: " + e.getMessage());
+      e.printStackTrace();
+    }
   }
 
 
@@ -396,23 +504,20 @@ public class OpenWithPlugin extends CordovaPlugin {
    * Converts an intent to JSON
    */
   private void populateInfoAndSend(final Intent intent, IntentActivity.StartActivityFun startAction) {
+    log(DEBUG, "populateInfoAndSend() called - action: " + intent.getAction());
     Bundle extras = intent.getExtras();
     try {
-      if (extras!=null && extras.get("json") != null) {
+      if (extras != null && extras.get("json") != null) {
+        log(INFO, "populateInfoAndSend() - Found processed JSON in extras (from IntentActivity)");
         JSONObject urlItem = new JSONObject(extras.get("json").toString());
         this.populateHtmlContentAndSend(urlItem, startAction);
-
-//            startAction.start(new JSONObject(extras.get("json").toString()));
         return;
       }
-      ;
-//            final ContentResolver contentResolver = this.cordova
-//                .getActivity().getApplicationContext().getContentResolver();
+      log(INFO, "populateInfoAndSend() - No processed JSON found, calling Serializer.populateAndSendIntent()");
       Serializer.populateAndSendIntent(this.cordova.getActivity(), intent, startAction);
     } catch (JSONException e) {
-      log(ERROR, "Error converting intent to JSON: " + e.getMessage());
+      log(ERROR, "populateInfoAndSend() - Error converting intent to JSON: " + e.getMessage());
       log(ERROR, Arrays.toString(e.getStackTrace()));
-//            return null;
     }
   }
 }
